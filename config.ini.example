@@ -1,0 +1,6 @@
+[mqtt]
+server_address = 192.168.0.xxx
+#do things based on this topic
+base_topic = victron1
+[serial]
+serial_port = /dev/ttyS=
