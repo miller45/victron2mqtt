@@ -1,3 +1,5 @@
+import json
+
 import mqttcom
 import victroncom
 import configparser
@@ -72,8 +74,25 @@ while onon:
                 lctime = currtime
             if currtime - tele_period > lteletime:
                 gstate=victronClient.get_simple_state()
-                print(gstate)
                 mqttClient.send_tele(1, gstate)
+                stats=victronClient.get_statistics()
+                mqttClient.send_tele(2,stats)
+                details=victronClient.get_detailed_states()
+                mqttClient.send_tele(3, details)
+                batt=victronClient.get_battery_details()
+                mqttClient.send_tele(4,batt)
+                unknown=victronClient.get_unknown_state()
+                mqttClient.send_tele(5,unknown)
+                all={
+                    "GLOBALSTATE":gstate,
+                    "STATISTICS":stats,
+                    "DETAILS":details,
+                    "BATTERY":batt,
+                    "UKNOWN":unknown
+                }
+                mqttClient.send_tele("", all)
+                #print(gstate)
+
                 lteletime = currtime
 
             if lstateCounter != mqttClient.stateCounter:

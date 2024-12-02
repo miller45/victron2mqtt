@@ -95,19 +95,15 @@ class VictronClient:
             #  lit=int.from_bytes(data[di:di+2],byteorder="little")
             shif = int.from_bytes(data[di + 1:di + 3], byteorder="big")
             # print(f"#{di} big {big} shif {shif}")
-            self.debugo("{di}\t{big}")
+            #self.debugo("{di}\t{big}")
 
     def decode_for_fu(self, fun, reg_nu, data):
         reg_nu_text = hex(reg_nu)
         if fun == 4 and hex(reg_nu) == battery_code:
-            batteryvoltageraw = int.from_bytes(data[0:2], byteorder="big")
-            batteryvoltage = batteryvoltageraw / 100
-            scurrentraw = int.from_bytes(data[3:5], byteorder="little")
-            scurrent = scurrentraw / 100
 
             return {
-                "battery_voltage": batteryvoltage,
-                "battery_current": scurrent
+                "battery_voltage": int.from_bytes(data[0:2], byteorder="big")/100,
+                "battery_current": int.from_bytes(data[2:4], byteorder="big")/100
             }
         if fun == 4 and hex(reg_nu) == charge_mode_code:
             loadon = (int.from_bytes(data[5:6], byteorder="big") & 1) > 0
@@ -117,10 +113,10 @@ class VictronClient:
                 15: "equilibrate",
                 11: "boostcharge",
                 7: "float",
-                1: "not charging"
+                1: "notcharging"
             }
             res = {
-                "loadon": loadon,
+                "load": "on" if loadon else "off",
                 "chargemode": "unknown"
             }
             if chargmode in cmods:
@@ -147,9 +143,9 @@ class VictronClient:
             }
             # print(f"load is {loadon}")
         if fun == 2:
-            self.dumpallvalues(data, len(data))
+            #self.dumpallvalues(data, len(data))
             return {
-                "fu": 2
+                "fu": int.from_bytes(data[0:1],byteorder="big")
             }
         if fun == int("43", 16):
             # dumpallvalues(data,len(data)-2)
@@ -161,7 +157,7 @@ class VictronClient:
                 "array_voltage": int.from_bytes(data[4:6], byteorder="big") / 100,
                 "array_current": int.from_bytes(data[6:8], byteorder="big") / 100,
                 "battery_voltage": int.from_bytes(data[12:14], byteorder="big") / 100,
-                "some_current": int.from_bytes(data[14:16], byteorder="big") / 1000,
+                "some_current": int.from_bytes(data[14:16], byteorder="big") / 100,
                 "load_voltage1": int.from_bytes(data[20:22], byteorder="big") / 100,
                 "load_current1": int.from_bytes(data[24:26], byteorder="big") / 1000,
                 "load_voltage2": int.from_bytes(data[28:30], byteorder="big") / 100,
@@ -178,6 +174,16 @@ class VictronClient:
 
     def get_simple_state(self):
         return self.read_pwm_data('cmdreadu1')
+    def get_statistics(self):
+        return self.read_pwm_data('cmdreadu5')
+    def get_detailed_states(self):
+        return self.read_pwm_data('cmdreadu3')
+
+    def get_battery_details(self):
+        return self.read_pwm_data('cmdreadu4')
+    def get_unknown_state(self):
+        return self.read_pwm_data('cmdreadu2')
+
 
 
 
