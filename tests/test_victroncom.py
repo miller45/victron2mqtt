@@ -96,16 +96,24 @@ class SerialTransportTests(unittest.TestCase):
         serial_constructor.assert_called_once_with("/dev/ttyUSB0", 115200, timeout=1)
         self.assertEqual(serial_port.writes, [bytes.fromhex("0104331a00039e88")])
 
-    def test_calculates_crc_for_cmdreadu1_request(self):
-        response = bytes([1, 4, 6]) + bytes([0, 0, 0, 11, 0, 1])
-        serial_port = FakeSerial(response + victroncom.modbus_crc(response).to_bytes(2, "little"))
+    def test_calculates_crc_for_all_read_requests(self):
+        expected_requests = {
+            "cmdreadu1": "010432000003beb3",
+            "cmdreadu2": "010220000001b20a",
+            "cmdreadu3": "01433100001b0af2",
+            "cmdreadu4": "0104331a00039e88",
+            "cmdreadu5": "010433020012de83",
+        }
         client = victroncom.VictronClient("/dev/ttyUSB0")
         client.debugo = Mock()
 
-        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
-            client.read_pwm_data("cmdreadu1")
+        for command_name, expected_request in expected_requests.items():
+            with self.subTest(command=command_name):
+                serial_port = FakeSerial(b"\x01\x00")
+                with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+                    client.read_pwm_data(command_name)
 
-        self.assertEqual(serial_port.writes, [bytes.fromhex("010432000003beb3")])
+                self.assertEqual(serial_port.writes, [bytes.fromhex(expected_request)])
 
     def test_rejects_response_with_invalid_checksum(self):
         serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000") + b"\x00\x00")

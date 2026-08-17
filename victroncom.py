@@ -2,28 +2,32 @@ import serial
 
 cmds={
     "cmdreadu1":{ #chargemode
+        # Previous hardcoded request: 01 04 32 00 00 03 BE B3
         "command":"01 04 32 00 00 03".replace(" ",""),
-        "calculate_crc": True,
         "exfu": int("04",16),
         "exlen": 6
     },
     "cmdreadu2": { # keine ahnung
-        "command":"01 02 20 00 00 01 B2 0A".replace(" ",""),
+        # Previous hardcoded request: 01 02 20 00 00 01 B2 0A
+        "command":"01 02 20 00 00 01".replace(" ",""),
         "exfu": int("02",16),
         "exlen": 1
     },
     "cmdreadu3":{ # done
-        "command":"01 43 31 00 00 1B 0A F2".replace(" ",""),
+        # Previous hardcoded request: 01 43 31 00 00 1B 0A F2
+        "command":"01 43 31 00 00 1B".replace(" ",""),
         "exfu": int("43",16),
         "exlen": int("36",16)
     },
     "cmdreadu4":{ # done(kinda)battery voltage battery current
-        "command":"01 04 33 1A 00 03 9E 88".replace(" ",""),
+        # Previous hardcoded request: 01 04 33 1A 00 03 9E 88
+        "command":"01 04 33 1A 00 03".replace(" ",""),
         "exfu":int("04",16),
         "exlen":int("06",16)
     },
     "cmdreadu5":{ # done: statistics
-        "command":"01 04 33 02 00 12 DE 83".replace(" ",""),
+        # Previous hardcoded request: 01 04 33 02 00 12 DE 83
+        "command":"01 04 33 02 00 12".replace(" ",""),
         "exfu": int("04", 16),
         "exlen": int("24",16)
     }
@@ -71,9 +75,8 @@ class VictronClient:
     def read_pwm_data(self, name):
         md = "deviceid"
         curcmdu = cmds[name]
-        bincmd = bytes(hex_to_binary(curcmdu['command']))
-        if curcmdu.get("calculate_crc"):
-            bincmd += modbus_crc(bincmd).to_bytes(2, byteorder="little")
+        command = bytes(hex_to_binary(curcmdu['command']))
+        bincmd = command + modbus_crc(command).to_bytes(2, byteorder="little")
         reg_nu = int.from_bytes(bincmd[2:4], byteorder="big")
 
         curexlen = curcmdu['exlen']
