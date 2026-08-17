@@ -94,7 +94,18 @@ class SerialTransportTests(unittest.TestCase):
 
         self.assertEqual(result, {"battery_voltage": 24.04, "battery_current": 650.36})
         serial_constructor.assert_called_once_with("/dev/ttyUSB0", 115200, timeout=1)
-        self.assertEqual(serial_port.writes, [victroncom.hex_to_binary(victroncom.cmds["cmdreadu4"]["command"])])
+        self.assertEqual(serial_port.writes, [bytes.fromhex("0104331a00039e88")])
+
+    def test_calculates_crc_for_cmdreadu1_request(self):
+        response = bytes([1, 4, 6]) + bytes([0, 0, 0, 11, 0, 1])
+        serial_port = FakeSerial(response + victroncom.modbus_crc(response).to_bytes(2, "little"))
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+        client.debugo = Mock()
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+            client.read_pwm_data("cmdreadu1")
+
+        self.assertEqual(serial_port.writes, [bytes.fromhex("010432000003beb3")])
 
     def test_rejects_response_with_invalid_checksum(self):
         serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000") + b"\x00\x00")

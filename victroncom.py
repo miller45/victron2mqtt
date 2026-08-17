@@ -2,7 +2,8 @@ import serial
 
 cmds={
     "cmdreadu1":{ #chargemode
-        "command":"01 04 32 00 00 03 BE B3".replace(" ",""),
+        "command":"01 04 32 00 00 03".replace(" ",""),
+        "calculate_crc": True,
         "exfu": int("04",16),
         "exlen": 6
     },
@@ -70,7 +71,9 @@ class VictronClient:
     def read_pwm_data(self, name):
         md = "deviceid"
         curcmdu = cmds[name]
-        bincmd = hex_to_binary(curcmdu['command'])  # read load on/of
+        bincmd = bytes(hex_to_binary(curcmdu['command']))
+        if curcmdu.get("calculate_crc"):
+            bincmd += modbus_crc(bincmd).to_bytes(2, byteorder="little")
         reg_nu = int.from_bytes(bincmd[2:4], byteorder="big")
 
         curexlen = curcmdu['exlen']

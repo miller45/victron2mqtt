@@ -110,3 +110,4 @@ Thumbs.db:encryptable
 # dont sent local config ever to github
 config.ini
 __pycache__
+techdocs/
