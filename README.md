@@ -15,6 +15,8 @@ python3 victron_cli.py --port /dev/ttyUSB0 unknown
 python3 victron_cli.py --port /dev/ttyUSB0 device-information
 python3 victron_cli.py --port /dev/ttyUSB0 device-id
 python3 victron_cli.py --port /dev/ttyUSB0 profiles
+python3 victron_cli.py --port /dev/ttyUSB0 profiles --export battery-profile.json
+python3 victron_cli.py --port /dev/ttyUSB0 profiles --import battery-profile.json --yes
 python3 victron_cli.py --port /dev/ttyUSB0 all
 ```
 

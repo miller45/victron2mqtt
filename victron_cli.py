@@ -39,7 +39,17 @@ def parse_args(argv=None):
         action="store_true",
         help="Warn about invalid response checksums but decode their payloads.",
     )
-    return parser.parse_args(argv)
+    parser.add_argument("--export", metavar="FILE", help="Save a read battery profile as JSON.")
+    parser.add_argument("--import", dest="import_file", metavar="FILE", help="Write a battery profile JSON file.")
+    parser.add_argument("--yes", action="store_true", help="Confirm a battery-profile write.")
+    args = parser.parse_args(argv)
+    if args.command != "profiles" and (args.export or args.import_file):
+        parser.error("--export and --import are only available with profiles")
+    if args.export and args.import_file:
+        parser.error("--export and --import cannot be used together")
+    if args.import_file and not args.yes:
+        parser.error("--import requires --yes")
+    return args
 
 
 def get_serial_port(port, config_path):
@@ -81,8 +91,19 @@ def main(argv=None):
         port = get_serial_port(args.port, args.config)
         client = victroncom.VictronClient(port, validate_checksum=not args.ignore_checksum)
         client.debugo = lambda _message: None
-        result = read_command(client, args.command)
-    except (OSError, ValueError) as error:
+        if args.import_file:
+            with open(args.import_file, encoding="utf-8") as profile_file:
+                profile = json.load(profile_file)
+            if not client.set_battery_profile(profile):
+                raise OSError("failed to write battery profile")
+            result = {"BATTERY_PROFILE": profile}
+        else:
+            result = read_command(client, args.command)
+            if args.export:
+                with open(args.export, "w", encoding="utf-8") as profile_file:
+                    json.dump(result["BATTERY_PROFILE"], profile_file, indent=2, sort_keys=True)
+                    profile_file.write("\n")
+    except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 

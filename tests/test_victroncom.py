@@ -110,6 +110,33 @@ class DecodeTests(unittest.TestCase):
         self.assertEqual(result["charge_mode"], "soc")
         send_request.assert_called_once_with(bytes.fromhex("014390000071"), 0x43)
 
+    def test_writes_user_battery_profile_in_documented_batches(self):
+        profile = {
+            "battery_type": "user", "battery_type_code": 0, "battery_capacity_ah": 200,
+            "temperature_compensation": -0.04, "overvoltage_cutoff_voltage": 15.0,
+            "charge_limit_voltage": 14.4, "overvoltage_recovery_voltage": 14.8,
+            "equalization_voltage": 14.8, "boost_voltage": 14.6, "float_voltage": 13.8,
+            "boost_recovery_voltage": 13.2, "low_voltage_recovery_voltage": 12.6,
+            "warning_recovery_voltage": 12.4, "low_voltage_warning_voltage": 12.0,
+            "low_voltage_cutoff_voltage": 11.8, "discharge_limit_voltage": 11.5,
+            "rated_voltage_level": 1, "equalization_duration_minutes": 120,
+            "boost_duration_minutes": 180, "battery_charge_soc": 90,
+            "battery_discharge_soc": 30, "charge_mode": "soc", "charge_mode_code": 1,
+        }
+
+        with patch.object(self.client, "_write_holding_registers", return_value=True) as write:
+            self.assertTrue(self.client.set_battery_profile(profile))
+
+        self.assertEqual(
+            write.call_args_list,
+            [
+                ((36967, [1]),),
+                ((36864, [0, 200, 4, 1500, 1440, 1480, 1480, 1460, 1380, 1320, 1260, 1240, 1200, 1180, 1150]),),
+                ((36971, [120, 180, 90, 30]),),
+                ((36976, [1]),),
+            ],
+        )
+
 
 class SerialTransportTests(unittest.TestCase):
     def test_sends_command_and_decodes_valid_response(self):

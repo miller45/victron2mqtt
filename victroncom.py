@@ -271,6 +271,113 @@ class VictronClient:
             "charge_mode_code": values[20],
         }
 
+    def set_battery_profile(self, profile):
+        values = self._encode_battery_profile(profile)
+        battery_type, charge_mode = values[0], values[20]
+
+        writes = [(36967, values[15:16])]
+        writes.append((36864, values[:15] if battery_type == 0 else values[:3]))
+        writes.append((36971, values[16:20] if charge_mode == 1 else values[16:18]))
+        writes.append((36976, values[20:21]))
+        for start_address, write_values in writes:
+            if not self._write_holding_registers(start_address, write_values):
+                return None
+        return True
+
+    def _encode_battery_profile(self, profile):
+        if not isinstance(profile, dict):
+            raise ValueError("battery profile must be a JSON object")
+
+        required_keys = {
+            "battery_type", "battery_type_code", "battery_capacity_ah",
+            "temperature_compensation", "overvoltage_cutoff_voltage",
+            "charge_limit_voltage", "overvoltage_recovery_voltage",
+            "equalization_voltage", "boost_voltage", "float_voltage",
+            "boost_recovery_voltage", "low_voltage_recovery_voltage",
+            "warning_recovery_voltage", "low_voltage_warning_voltage",
+            "low_voltage_cutoff_voltage", "discharge_limit_voltage",
+            "rated_voltage_level", "equalization_duration_minutes",
+            "boost_duration_minutes", "battery_charge_soc", "battery_discharge_soc",
+            "charge_mode", "charge_mode_code",
+        }
+        missing_keys = required_keys - profile.keys()
+        if missing_keys:
+            raise ValueError("battery profile is missing: " + ", ".join(sorted(missing_keys)))
+
+        battery_type = self._profile_integer(profile, "battery_type_code")
+        if BATTERY_PROFILES.get(battery_type) != profile["battery_type"]:
+            raise ValueError("battery_type does not match battery_type_code")
+        charge_mode = self._profile_integer(profile, "charge_mode_code")
+        if charge_mode not in (0, 1):
+            raise ValueError("charge_mode_code must be 0 or 1")
+        if profile["charge_mode"] != ("soc" if charge_mode else "voltage_compensation"):
+            raise ValueError("charge_mode does not match charge_mode_code")
+
+        return [
+            battery_type,
+            self._profile_integer(profile, "battery_capacity_ah"),
+            self._profile_scaled_integer(profile, "temperature_compensation", -100),
+            *[self._profile_scaled_integer(profile, name, 100) for name in (
+                "overvoltage_cutoff_voltage", "charge_limit_voltage",
+                "overvoltage_recovery_voltage", "equalization_voltage", "boost_voltage",
+                "float_voltage", "boost_recovery_voltage", "low_voltage_recovery_voltage",
+                "warning_recovery_voltage", "low_voltage_warning_voltage",
+                "low_voltage_cutoff_voltage", "discharge_limit_voltage",
+            )],
+            self._profile_integer(profile, "rated_voltage_level"),
+            self._profile_integer(profile, "equalization_duration_minutes"),
+            self._profile_integer(profile, "boost_duration_minutes"),
+            self._profile_integer(profile, "battery_charge_soc"),
+            self._profile_integer(profile, "battery_discharge_soc"),
+            charge_mode,
+        ]
+
+    @staticmethod
+    def _profile_integer(profile, name):
+        value = profile[name]
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFF:
+            raise ValueError(f"{name} must be an integer between 0 and 65535")
+        return value
+
+    @staticmethod
+    def _profile_scaled_integer(profile, name, scale):
+        value = profile[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be a number")
+        scaled_value = round(value * scale)
+        if scaled_value < 0 or scaled_value > 0xFFFF or scaled_value != value * scale:
+            raise ValueError(f"{name} has an invalid value or precision")
+        return scaled_value
+
+    def _write_holding_registers(self, start_address, values):
+        payload = b"".join(value.to_bytes(2, byteorder="big") for value in values)
+        request = bytes((
+            DEVICE_UNIT_ID,
+            0x10,
+            start_address >> 8,
+            start_address & 0xFF,
+            len(values) >> 8,
+            len(values) & 0xFF,
+            len(payload),
+        )) + payload
+        request_with_crc = request + modbus_crc(request).to_bytes(2, byteorder="little")
+
+        with serial.Serial(self.serial_port, 115200, timeout=1) as ser:
+            ser.write(request_with_crc)
+            response = ser.read(8)
+        if len(response) != 8:
+            self.debugo("incomplete write response")
+            return None
+        if response[:6] != request[:6]:
+            self.debugo("unexpected write response")
+            return None
+        received_crc = int.from_bytes(response[6:], byteorder="little")
+        if modbus_crc(response[:6]) != received_crc:
+            self.debugo("invalid response checksum")
+            if self.validate_checksum:
+                return None
+        return True
+
     def _decode_sparse_registers(self, data, register_count):
         table_length = (register_count + 7) // 8
         if len(data) < 1 + table_length:

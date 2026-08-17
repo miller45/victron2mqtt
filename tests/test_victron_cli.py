@@ -5,7 +5,7 @@ import sys
 import types
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, mock_open, patch
 
 
 sys.modules.setdefault("serial", types.ModuleType("serial"))
@@ -73,6 +73,37 @@ class CliTests(unittest.TestCase):
             victron_cli.read_command(client, "profiles"),
             {"BATTERY_PROFILE": {"battery_type": "lead_acid_flooded"}},
         )
+
+    def test_exports_battery_profile(self):
+        client = Mock()
+        client.get_battery_profile.return_value = {"battery_type": "lead_acid_flooded"}
+        profile_file = mock_open()
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+            with patch("builtins.open", profile_file):
+                self.assertEqual(
+                    victron_cli.main(["--port", "/dev/ttyUSB0", "profiles", "--export", "profile.json"]),
+                    0,
+                )
+
+        profile_file.assert_called_once_with("profile.json", "w", encoding="utf-8")
+        self.assertIn(
+            "lead_acid_flooded",
+            "".join(call.args[0] for call in profile_file().write.call_args_list),
+        )
+
+    def test_imports_battery_profile_after_confirmation(self):
+        client = Mock()
+        profile_file = mock_open(read_data='{"battery_type": "gel"}')
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+            with patch("builtins.open", profile_file):
+                self.assertEqual(
+                    victron_cli.main(["--port", "/dev/ttyUSB0", "profiles", "--import", "profile.json", "--yes"]),
+                    0,
+                )
+
+        client.set_battery_profile.assert_called_once_with({"battery_type": "gel"})
 
 
 if __name__ == "__main__":
