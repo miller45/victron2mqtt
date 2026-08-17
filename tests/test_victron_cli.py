@@ -81,6 +81,19 @@ class CliTests(unittest.TestCase):
         client.set_battery_maximum_current.assert_called_once_with(10.0)
         self.assertEqual(output.getvalue(), '{\n  "BATTERY_MAXIMUM_CURRENT": 10.0\n}\n')
 
+    def test_reads_product_id(self):
+        client = Mock()
+        client.get_product_id.return_value = 0xA381
+        output = io.StringIO()
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+            with redirect_stdout(output):
+                result = victron_cli.main(["--port", "/dev/ttyUSB0", "product-id"])
+
+        self.assertEqual(result, 0)
+        client.get_product_id.assert_called_once_with()
+        self.assertEqual(output.getvalue(), '{\n  "PRODUCT_ID": 41857\n}\n')
+
     def test_reads_charge_current(self):
         client = Mock()
         client.get_battery_charge_current.return_value = 1.234

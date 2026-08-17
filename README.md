@@ -12,6 +12,7 @@ python3 victron_cli.py --port /dev/ttyUSB0 statistics
 python3 victron_cli.py --port /dev/ttyUSB0 details
 python3 victron_cli.py --port /dev/ttyUSB0 battery
 python3 victron_cli.py --port /dev/ttyUSB0 charge-current
+python3 victron_cli.py --port /dev/ttyUSB0 product-id
 python3 victron_cli.py --port /dev/ttyUSB0 unknown
 python3 victron_cli.py --port /dev/ttyUSB0 all
 python3 victron_cli.py --port /dev/ttyUSB0 --battery-maximum-current 10.0 set-battery-maximum-current

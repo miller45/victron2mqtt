@@ -172,6 +172,26 @@ class SerialTransportTests(unittest.TestCase):
         serial_constructor.assert_called_once_with("/dev/ttyUSB0", 19200, timeout=1)
         self.assertEqual(serial_port.writes, [frame])
 
+    def test_reads_bmv_product_id_using_vedirect_frame(self):
+        response = b":181A330\n"
+        serial_port = FakeSerial(response)
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True) as serial_constructor:
+            self.assertEqual(client.get_product_id(), 0xA381)
+
+        serial_constructor.assert_called_once_with("/dev/ttyUSB0", 19200, timeout=1)
+        self.assertEqual(serial_port.writes, [b":451\n"])
+
+    def test_rejects_unexpected_product_id_response(self):
+        response = b":581A32C\n"
+        serial_port = FakeSerial(response)
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+            with self.assertRaisesRegex(ValueError, "unexpected response"):
+                client.get_product_id()
+
     def test_reads_battery_charge_current_using_vedirect_frame(self):
         response = b":80A2000D20400004D\n"
         serial_port = FakeSerial(response)

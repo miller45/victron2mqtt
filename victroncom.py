@@ -211,6 +211,16 @@ class VictronClient:
     def get_unknown_state(self):
         return self.read_pwm_data('cmdreadu2')
 
+    def get_product_id(self):
+        """Return the 16-bit VE.Direct product ID documented for BMV devices."""
+        response = self._send_vedirect_frame(self._vedirect_frame(0x04, b""))
+        payload = self._decode_vedirect_frame(response)
+
+        if len(payload) != 3 or payload[0] != 0x01:
+            raise ValueError(f"unexpected response while reading product ID: {response!r}")
+
+        return int.from_bytes(payload[1:], byteorder="little")
+
     def get_battery_charge_current(self):
         """Return the VE.Direct MPPT battery charge current in amperes."""
         request = self._vedirect_frame(0x07, bytes([0x0A, 0x20, 0x00]))
