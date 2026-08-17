@@ -48,11 +48,22 @@ def hex_to_binary(hextext):
     res = array.array("B",bvals)
     return res
 
+
+def modbus_crc(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc
+
+
 class VictronClient:
 
 
-    def __init__(self, serial_port):
+    def __init__(self, serial_port, validate_checksum=True):
         self.serial_port = serial_port
+        self.validate_checksum = validate_checksum
     def debugo(self,msg):
         print(msg)
 
@@ -76,12 +87,20 @@ class VictronClient:
             if fucode == curexfu:
                 blen = int.from_bytes(ser.read(1), byteorder="big")
                 all = ser.read(blen + 2)
+                if len(all) != blen + 2:
+                    self.debugo("incomplete response")
+                    return None
+
+                data = all[:-2]
+                received_crc = int.from_bytes(all[-2:], byteorder="little")
+                response = header + bytes([blen]) + data
+                if modbus_crc(response) != received_crc:
+                    self.debugo("invalid response checksum")
+                    if self.validate_checksum:
+                        return None
+
                 self.debugo(f"{blen} ex{curexlen}")
-                decm = self.decode_for_fu(fucode, reg_nu, all)
-                # print(binary_to_hex(all))
-                datalen = len(all) - 2
-                data = all[0:datalen]
-                return decm
+                return self.decode_for_fu(fucode, reg_nu, data)
                 # print(hex(modbus_crc(data)))
                 # print(check_crc(data))
                 pass

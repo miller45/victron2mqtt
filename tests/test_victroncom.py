@@ -82,8 +82,9 @@ class DecodeTests(unittest.TestCase):
 
 class SerialTransportTests(unittest.TestCase):
     def test_sends_command_and_decodes_valid_response(self):
-        # slave id, function code, payload length, payload, CRC
-        serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000") + b"\x00\x00")
+        # slave id, function code, payload length, payload, CRC (little-endian)
+        response = bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000")
+        serial_port = FakeSerial(response + victroncom.modbus_crc(response).to_bytes(2, "little"))
         serial_constructor = Mock(return_value=serial_port)
         client = victroncom.VictronClient("/dev/ttyUSB0")
         client.debugo = Mock()
@@ -94,6 +95,37 @@ class SerialTransportTests(unittest.TestCase):
         self.assertEqual(result, {"battery_voltage": 24.04, "battery_current": 650.36})
         serial_constructor.assert_called_once_with("/dev/ttyUSB0", 115200, timeout=1)
         self.assertEqual(serial_port.writes, [victroncom.hex_to_binary(victroncom.cmds["cmdreadu4"]["command"])])
+
+    def test_rejects_response_with_invalid_checksum(self):
+        serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000") + b"\x00\x00")
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+        client.debugo = Mock()
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+            self.assertIsNone(client.read_pwm_data("cmdreadu4"))
+
+        client.debugo.assert_any_call("invalid response checksum")
+
+    def test_warns_but_decodes_invalid_checksum_when_validation_is_disabled(self):
+        serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c0000") + b"\x00\x00")
+        client = victroncom.VictronClient("/dev/ttyUSB0", validate_checksum=False)
+        client.debugo = Mock()
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+            result = client.read_pwm_data("cmdreadu4")
+
+        self.assertEqual(result, {"battery_voltage": 24.04, "battery_current": 650.36})
+        client.debugo.assert_any_call("invalid response checksum")
+
+    def test_rejects_incomplete_response(self):
+        serial_port = FakeSerial(bytes([1, 4, 6]) + bytes.fromhex("0964fe0c"))
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+        client.debugo = Mock()
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True):
+            self.assertIsNone(client.read_pwm_data("cmdreadu4"))
+
+        client.debugo.assert_any_call("incomplete response")
 
     def test_returns_none_for_unexpected_function_code(self):
         serial_port = FakeSerial(b"\x01\x03")
