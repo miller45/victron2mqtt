@@ -65,6 +65,15 @@ class CliTests(unittest.TestCase):
             for output_name, method_name in victron_cli.COMMANDS.values()
         })
 
+    def test_reads_battery_profile(self):
+        client = Mock()
+        client.get_battery_profile.return_value = {"battery_type": "lead_acid_flooded"}
+
+        self.assertEqual(
+            victron_cli.read_command(client, "profiles"),
+            {"BATTERY_PROFILE": {"battery_type": "lead_acid_flooded"}},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

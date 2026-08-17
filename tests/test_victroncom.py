@@ -79,6 +79,37 @@ class DecodeTests(unittest.TestCase):
     def test_returns_empty_mapping_for_unknown_function(self):
         self.assertEqual(self.client.decode_for_fu(99, 0, b""), {})
 
+    def test_decodes_battery_profile(self):
+        values = list(range(113))
+        values[0] = 3
+        values[1] = 200
+        values[2] = 4
+        values[4] = 1440
+        values[6] = 1480
+        values[7] = 1460
+        values[8] = 1380
+        values[107] = 120
+        values[108] = 180
+        values[112] = 1
+        payload = bytes([226, 1]) + bytes([255] * 14) + b"".join(
+            value.to_bytes(2, "big") for value in values
+        )
+
+        with patch.object(self.client, "_send_request", return_value=payload) as send_request:
+            result = self.client.get_battery_profile()
+
+        self.assertEqual(result["battery_type"], "lead_acid_flooded")
+        self.assertEqual(result["battery_capacity_ah"], 200)
+        self.assertEqual(result["temperature_compensation"], -0.04)
+        self.assertEqual(result["charge_limit_voltage"], 14.4)
+        self.assertEqual(result["equalization_voltage"], 14.8)
+        self.assertEqual(result["boost_voltage"], 14.6)
+        self.assertEqual(result["float_voltage"], 13.8)
+        self.assertEqual(result["equalization_duration_minutes"], 120)
+        self.assertEqual(result["boost_duration_minutes"], 180)
+        self.assertEqual(result["charge_mode"], "soc")
+        send_request.assert_called_once_with(bytes.fromhex("014390000071"), 0x43)
+
 
 class SerialTransportTests(unittest.TestCase):
     def test_sends_command_and_decodes_valid_response(self):

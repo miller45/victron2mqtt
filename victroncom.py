@@ -39,6 +39,17 @@ cmdreadcontrolpara3="014390000071a921"
 cmdreadtimepara=   '010390130003d90e'
 DEVICE_UNIT_ID = 1
 DEVICE_ID_DISCOVERY_UNIT_ID = 248
+CONTROL_PARAMETERS_START = 36864
+CONTROL_PARAMETERS_COUNT = 113
+CONTROL_PARAMETER_OFFSETS = (
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 103, 107, 108, 109, 110, 112
+)
+BATTERY_PROFILES = {
+    0: "user",
+    1: "lead_acid_maintenance_free",
+    2: "gel",
+    3: "lead_acid_flooded",
+}
 charge_mode_code="0x3200"
 statistic_code="0x3302"
 battery_code="0x331a"
@@ -209,6 +220,83 @@ class VictronClient:
         return self.read_pwm_data('cmdreadu4')
     def get_unknown_state(self):
         return self.read_pwm_data('cmdreadu2')
+
+    def get_battery_profile(self):
+        data = self._send_request(
+            bytes((
+                DEVICE_UNIT_ID,
+                0x43,
+                CONTROL_PARAMETERS_START >> 8,
+                CONTROL_PARAMETERS_START & 0xFF,
+                CONTROL_PARAMETERS_COUNT >> 8,
+                CONTROL_PARAMETERS_COUNT & 0xFF,
+            )),
+            0x43,
+        )
+        if data is None:
+            return None
+
+        registers = self._decode_sparse_registers(data, CONTROL_PARAMETERS_COUNT)
+        if registers is None:
+            return None
+        if any(registers[offset] is None for offset in CONTROL_PARAMETER_OFFSETS):
+            self.debugo("incomplete battery profile response")
+            return None
+
+        values = [registers[offset] for offset in CONTROL_PARAMETER_OFFSETS]
+        battery_type = values[0]
+        return {
+            "battery_type": BATTERY_PROFILES.get(battery_type, "unknown"),
+            "battery_type_code": battery_type,
+            "battery_capacity_ah": values[1],
+            "temperature_compensation": -values[2] / 100,
+            "overvoltage_cutoff_voltage": values[3] / 100,
+            "charge_limit_voltage": values[4] / 100,
+            "overvoltage_recovery_voltage": values[5] / 100,
+            "equalization_voltage": values[6] / 100,
+            "boost_voltage": values[7] / 100,
+            "float_voltage": values[8] / 100,
+            "boost_recovery_voltage": values[9] / 100,
+            "low_voltage_recovery_voltage": values[10] / 100,
+            "warning_recovery_voltage": values[11] / 100,
+            "low_voltage_warning_voltage": values[12] / 100,
+            "low_voltage_cutoff_voltage": values[13] / 100,
+            "discharge_limit_voltage": values[14] / 100,
+            "rated_voltage_level": values[15],
+            "equalization_duration_minutes": values[16],
+            "boost_duration_minutes": values[17],
+            "battery_charge_soc": values[18],
+            "battery_discharge_soc": values[19],
+            "charge_mode": "soc" if values[20] == 1 else "voltage_compensation",
+            "charge_mode_code": values[20],
+        }
+
+    def _decode_sparse_registers(self, data, register_count):
+        table_length = (register_count + 7) // 8
+        if len(data) < 1 + table_length:
+            self.debugo("incomplete sparse register response")
+            return None
+        if data[0] != register_count * 2:
+            self.debugo("unexpected sparse register response length")
+            return None
+
+        present_offsets = []
+        for table_index, value in enumerate(reversed(data[1 : 1 + table_length])):
+            present_offsets.extend(
+                table_index * 8 + bit for bit in range(8) if value & (1 << bit)
+            )
+        present_offsets = [offset for offset in present_offsets if offset < register_count]
+        value_data = data[1 + table_length :]
+        if len(value_data) != len(present_offsets) * 2:
+            self.debugo("invalid sparse register response")
+            return None
+
+        registers = [None] * register_count
+        for index, offset in enumerate(present_offsets):
+            registers[offset] = int.from_bytes(
+                value_data[index * 2 : index * 2 + 2], byteorder="big"
+            )
+        return registers
 
     def _send_request(self, request, expected_function):
         frame = bytes(request)
