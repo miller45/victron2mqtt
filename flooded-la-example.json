@@ -1,0 +1,26 @@
+{
+  "battery_capacity_ah": 95,
+  "battery_charge_soc": 30,
+  "battery_discharge_soc": 100,
+  "battery_type": "lead_acid_flooded",
+  "battery_type_code": 3,
+  "boost_duration_minutes": 120,
+  "boost_recovery_voltage": 13.2,
+  "boost_voltage": 14.6,
+  "charge_limit_voltage": 15.0,
+  "charge_mode": "voltage_compensation",
+  "charge_mode_code": 0,
+  "discharge_limit_voltage": 10.6,
+  "equalization_duration_minutes": 120,
+  "equalization_voltage": 14.8,
+  "float_voltage": 13.8,
+  "low_voltage_cutoff_voltage": 11.1,
+  "low_voltage_recovery_voltage": 12.6,
+  "low_voltage_warning_voltage": 12.0,
+  "overvoltage_cutoff_voltage": 16.0,
+  "overvoltage_recovery_voltage": 15.0,
+  "rated_voltage_level": 1,
+  "temperature_compensation": -3.0,
+  "warning_recovery_voltage": 12.2
+}
+
