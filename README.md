@@ -16,3 +16,5 @@ python3 victron_cli.py --port /dev/ttyUSB0 all
 ```
 
 When `--port` is omitted, the CLI reads `[serial] serial_port` from `config.ini`. Supply a different configuration file with `--config path/to/config.ini`.
+
+Response checksums are validated by default. Use `--ignore-checksum` to warn about invalid checksums while still decoding their payloads.

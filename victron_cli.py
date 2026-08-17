@@ -31,6 +31,11 @@ def parse_args(argv=None):
     parser.add_argument(
         "--config", default="config.ini", help="Configuration file used when --port is omitted."
     )
+    parser.add_argument(
+        "--ignore-checksum",
+        action="store_true",
+        help="Warn about invalid response checksums but decode their payloads.",
+    )
     return parser.parse_args(argv)
 
 
@@ -71,7 +76,7 @@ def main(argv=None):
 
     try:
         port = get_serial_port(args.port, args.config)
-        client = victroncom.VictronClient(port)
+        client = victroncom.VictronClient(port, validate_checksum=not args.ignore_checksum)
         client.debugo = lambda _message: None
         result = read_command(client, args.command)
     except (OSError, ValueError) as error:

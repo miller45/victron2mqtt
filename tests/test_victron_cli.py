@@ -34,13 +34,26 @@ class CliTests(unittest.TestCase):
         client.get_battery_details.return_value = {"battery_voltage": 24.04}
         output = io.StringIO()
 
-        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+        with patch("victron_cli.victroncom.VictronClient", return_value=client) as client_class:
             with redirect_stdout(output):
                 result = victron_cli.main(["--port", "/dev/ttyUSB0", "battery"])
 
         self.assertEqual(result, 0)
         self.assertEqual(output.getvalue(), '{\n  "BATTERY": {\n    "battery_voltage": 24.04\n  }\n}\n')
         self.assertTrue(callable(client.debugo))
+        client_class.assert_called_once_with("/dev/ttyUSB0", validate_checksum=True)
+
+    def test_ignore_checksum_disables_checksum_rejection(self):
+        client = Mock()
+        client.get_battery_details.return_value = {"battery_voltage": 24.04}
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client) as client_class:
+            self.assertEqual(
+                victron_cli.main(["--port", "/dev/ttyUSB0", "--ignore-checksum", "battery"]),
+                0,
+            )
+
+        client_class.assert_called_once_with("/dev/ttyUSB0", validate_checksum=False)
 
     def test_reads_all_command(self):
         client = Mock()
