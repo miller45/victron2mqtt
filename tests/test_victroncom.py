@@ -30,6 +30,11 @@ class FakeSerial:
         del self.response[:length]
         return result
 
+    def readline(self):
+        newline_index = self.response.find(b"\n")
+        length = len(self.response) if newline_index == -1 else newline_index + 1
+        return self.read(length)
+
 
 class HexToBinaryTests(unittest.TestCase):
     def test_converts_hex_pairs_to_byte_array(self):
@@ -155,6 +160,34 @@ class SerialTransportTests(unittest.TestCase):
             self.assertIsNone(client.read_pwm_data("cmdreadu4"))
 
         client.debugo.assert_any_call("unexpected fucode 0x3")
+
+    def test_sets_battery_maximum_current_using_vedirect_frame(self):
+        frame = b":8F0ED0064000C\n"
+        serial_port = FakeSerial(frame)
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True) as serial_constructor:
+            self.assertEqual(client.set_battery_maximum_current("10.0"), 10.0)
+
+        serial_constructor.assert_called_once_with("/dev/ttyUSB0", 19200, timeout=1)
+        self.assertEqual(serial_port.writes, [frame])
+
+    def test_reads_battery_charge_current_using_vedirect_frame(self):
+        response = b":80A2000D20400004D\n"
+        serial_port = FakeSerial(response)
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+
+        with patch.object(victroncom.serial, "Serial", return_value=serial_port, create=True) as serial_constructor:
+            self.assertEqual(client.get_battery_charge_current(), 1.234)
+
+        serial_constructor.assert_called_once_with("/dev/ttyUSB0", 19200, timeout=1)
+        self.assertEqual(serial_port.writes, [b":70A200024\n"])
+
+    def test_rejects_battery_current_outside_tenth_amp_increments(self):
+        client = victroncom.VictronClient("/dev/ttyUSB0")
+
+        with self.assertRaisesRegex(ValueError, "0.1 A increments"):
+            client.set_battery_maximum_current("10.05")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 import serial
 
 cmds={
@@ -208,6 +210,67 @@ class VictronClient:
         return self.read_pwm_data('cmdreadu4')
     def get_unknown_state(self):
         return self.read_pwm_data('cmdreadu2')
+
+    def get_battery_charge_current(self):
+        """Return the VE.Direct MPPT battery charge current in amperes."""
+        request = self._vedirect_frame(0x07, bytes([0x0A, 0x20, 0x00]))
+        response = self._send_vedirect_frame(request)
+        payload = self._decode_vedirect_frame(response)
+
+        if payload[:4] != bytes([0x08, 0x0A, 0x20, 0x00]) or len(payload) != 8:
+            raise ValueError(f"unexpected response while reading battery charge current: {response!r}")
+
+        return int.from_bytes(payload[4:], byteorder="little", signed=True) / 1000
+
+    def set_battery_maximum_current(self, current):
+        """Set the VE.Direct MPPT battery charge-current limit in amperes."""
+        try:
+            deciamps = int(round(float(current) * 10))
+        except (TypeError, ValueError) as error:
+            raise ValueError("battery maximum current must be a number") from error
+
+        if not 0 <= deciamps <= 0xFFFF or deciamps / 10 != float(current):
+            raise ValueError("battery maximum current must be between 0 and 6553.5 A in 0.1 A increments")
+
+        request = self._vedirect_frame(0x08, bytes([0xF0, 0xED, 0x00]) + deciamps.to_bytes(2, byteorder="little"))
+        response = self._send_vedirect_frame(request)
+        payload = self._decode_vedirect_frame(response)
+
+        if payload != bytes([0x08, 0xF0, 0xED, 0x00]) + deciamps.to_bytes(2, byteorder="little"):
+            raise ValueError(f"unexpected response while setting battery maximum current: {response!r}")
+
+        return deciamps / 10
+
+    @staticmethod
+    def _vedirect_frame(command, data):
+        payload = bytes([command]) + data
+        checksum = (-sum(payload) + 0x55) & 0xFF
+        return b":" + f"{command:X}".encode("ascii") + data.hex().upper().encode("ascii") + f"{checksum:02X}\n".encode("ascii")
+
+    def _send_vedirect_frame(self, frame):
+        with serial.Serial(self.serial_port, 19200, timeout=1) as ser:
+            ser.write(frame)
+            response = ser.readline()
+
+        if not response:
+            raise ValueError("no response from VE.Direct device")
+        return response
+
+    @staticmethod
+    def _decode_vedirect_frame(frame):
+        if not frame.startswith(b":") or not frame.endswith(b"\n"):
+            raise ValueError(f"invalid VE.Direct response frame: {frame!r}")
+        try:
+            encoded = frame[1:-1]
+            command = int(encoded[:1], 16)
+            data_and_checksum = bytes.fromhex(encoded[1:].decode("ascii"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise ValueError(f"invalid VE.Direct response frame: {frame!r}") from error
+
+        payload = bytes([command]) + data_and_checksum[:-1]
+        if (sum(payload) + data_and_checksum[-1]) & 0xFF != 0x55:
+            raise ValueError("invalid VE.Direct response checksum")
+        return payload
 
 
 

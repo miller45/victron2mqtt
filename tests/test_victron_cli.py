@@ -65,6 +65,41 @@ class CliTests(unittest.TestCase):
             for output_name, method_name in victron_cli.COMMANDS.values()
         })
 
+    def test_sets_battery_maximum_current(self):
+        client = Mock()
+        client.set_battery_maximum_current.return_value = 10.0
+        output = io.StringIO()
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+            with redirect_stdout(output):
+                result = victron_cli.main([
+                    "--port", "/dev/ttyUSB0", "--battery-maximum-current", "10.0",
+                    "set-battery-maximum-current",
+                ])
+
+        self.assertEqual(result, 0)
+        client.set_battery_maximum_current.assert_called_once_with(10.0)
+        self.assertEqual(output.getvalue(), '{\n  "BATTERY_MAXIMUM_CURRENT": 10.0\n}\n')
+
+    def test_reads_charge_current(self):
+        client = Mock()
+        client.get_battery_charge_current.return_value = 1.234
+        output = io.StringIO()
+
+        with patch("victron_cli.victroncom.VictronClient", return_value=client):
+            with redirect_stdout(output):
+                result = victron_cli.main(["--port", "/dev/ttyUSB0", "charge-current"])
+
+        self.assertEqual(result, 0)
+        client.get_battery_charge_current.assert_called_once_with()
+        self.assertEqual(output.getvalue(), '{\n  "BATTERY_CHARGE_CURRENT": 1.234\n}\n')
+
+    def test_setting_current_requires_value(self):
+        self.assertEqual(
+            victron_cli.main(["--port", "/dev/ttyUSB0", "set-battery-maximum-current"]),
+            1,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
