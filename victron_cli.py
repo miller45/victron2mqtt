@@ -17,6 +17,8 @@ COMMANDS = {
     "details": ("DETAILS", "get_detailed_states"),
     "battery": ("BATTERY", "get_battery_details"),
     "unknown": ("UNKNOWN", "get_unknown_state"),
+    "device-information": ("DEVICE_INFORMATION", "get_device_information"),
+    "device-id": ("DEVICE_ID", "get_device_id"),
 }
 
 

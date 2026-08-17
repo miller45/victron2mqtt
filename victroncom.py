@@ -37,7 +37,8 @@ cmdreadcontrolpara1="0104311d0001af30" #elen
 cmdreadcontrolpara2="01433005000adb03"
 cmdreadcontrolpara3="014390000071a921"
 cmdreadtimepara=   '010390130003d90e'
-cmdreaddeviceid="012b0e01007077"
+DEVICE_UNIT_ID = 1
+DEVICE_ID_DISCOVERY_UNIT_ID = 248
 charge_mode_code="0x3200"
 statistic_code="0x3302"
 battery_code="0x331a"
@@ -209,6 +210,76 @@ class VictronClient:
     def get_unknown_state(self):
         return self.read_pwm_data('cmdreadu2')
 
+    def _send_request(self, request, expected_function):
+        frame = bytes(request)
+        request_with_crc = frame + modbus_crc(frame).to_bytes(2, byteorder="little")
 
+        with serial.Serial(self.serial_port, 115200, timeout=1) as ser:
+            ser.write(request_with_crc)
+            header = ser.read(2)
+            if len(header) != 2:
+                self.debugo("incomplete response header")
+                return None
 
+            unit_id, function_code = header
+            if function_code != expected_function:
+                self.debugo(f"unexpected fucode {function_code:#x}")
+                return None
 
+            return self._read_vendor_response(ser, header)
+
+    def _read_vendor_response(self, ser, header):
+        payload = bytearray()
+        while True:
+            chunk = ser.read(1)
+            if not chunk:
+                self.debugo("incomplete response")
+                return None
+            payload.extend(chunk)
+
+            if len(payload) >= 2:
+                candidate = header + payload[:-2]
+                received_crc = int.from_bytes(payload[-2:], byteorder="little")
+                if modbus_crc(candidate) == received_crc:
+                    return bytes(payload[:-2])
+
+    def get_device_information(self):
+        information = {}
+        for read_code in (1, 2):
+            data = self._send_request(
+                bytes((DEVICE_UNIT_ID, 0x2B, 0x0E, read_code, 0)), 0x2B
+            )
+            if data is None:
+                return None
+            if len(data) < 6 or data[0] != 0x0E or data[1] != read_code:
+                self.debugo("invalid device information response")
+                return None
+
+            object_count = data[5]
+            offset = 6
+            for _ in range(object_count):
+                if offset + 2 > len(data):
+                    self.debugo("incomplete device information object")
+                    return None
+                object_id, length = data[offset : offset + 2]
+                offset += 2
+                if offset + length > len(data):
+                    self.debugo("incomplete device information value")
+                    return None
+                information[str(object_id)] = data[offset : offset + length].decode(
+                    "ascii", errors="replace"
+                )
+                offset += length
+        return information
+
+    def get_device_id(self):
+        data = self._send_request(
+            bytes((DEVICE_ID_DISCOVERY_UNIT_ID, 0x45, 0, 1, 1, DEVICE_ID_DISCOVERY_UNIT_ID)),
+            0x45,
+        )
+        if data is None:
+            return None
+        if len(data) != 1:
+            self.debugo("invalid device ID response")
+            return None
+        return data[0]
